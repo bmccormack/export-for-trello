@@ -17,13 +17,15 @@ var $,
     Blob,
     saveAs,
     actionsCreateCard,
+    actionsMoveCard,
     idBoard;
 
 
 // Variables
 var $excel_btn,
     addInterval,
-    columnHeadings = ['List', 'Title', 'Description', 'Points', 'Due', 'Members', 'Labels', 'Card #', 'Card ID','Member Created','DateTime Created'];
+    columnHeadings = ['List', 'Title', 'Description', 'Points', 'Due', 'Members', 'Labels', 'Card #', 'Card ID',
+      'Member Created','DateTime Created','Member Done','DateTime Done'];
 
 window.URL = window.webkitURL || window.URL;
 
@@ -91,7 +93,9 @@ function createExcelExport() {
                         rArch,
                         r,
                         memberCreator,
-                        datetimeCreated;
+                        datetimeCreated,
+                        memberDone,
+                        datetimeDone;
                     
                     title = title.replace(pointReg, '');
                     
@@ -129,14 +133,36 @@ function createExcelExport() {
                     }
                     else {
                       //use the API to get the action created method
-                      var actionCreateCard = getCreateCardAction(card.id)
+                      var actionCreateCard = getCreateCardAction(card.id);
                       if (actionCreateCard){
                         memberCreator = actionCreateCard.memberCreator.fullName;
                         datetimeCreated = actionCreateCard.date;
                       }
-                      else{
+                      else {
                         memberCreator = "";
                         datetimeCreated = "";
+                      }
+                    }
+                    
+                    //Find out when the card was most recently moved to "Done"
+                    var nameListDone = "Done";
+                    var query = Enumerable.from(data.actions)
+                      .where(function(x){if (x.data.card && x.data.listAfter){return x.data.card.id == card.id && x.data.listAfter.name == nameListDone;}})
+                      .orderByDescending(function(x){return x.date;})
+                      .toArray();
+                    if (query.length > 0){
+                      memberDone = query[0].memberCreator.fullName;
+                      datetimeDone = query[0].date;
+                    }
+                    else {
+                      var actionMoveCard = getMoveCardAction(card.id, nameListDone);
+                      if (actionMoveCard){
+                        memberDone = actionMoveCard.memberCreator.fullName;
+                        datetimeDone = actionMoveCard.date;
+                      }
+                      else {
+                        memberDone = "";
+                        datetimeDone = "";
                       }
                     }
                     
@@ -156,7 +182,9 @@ function createExcelExport() {
                         card.idShort,
                         card.shortLink,
                         memberCreator,
-                        datetimeCreated
+                        datetimeCreated,
+                        memberDone,
+                        datetimeDone
                     ];
                 
                     // Writes all closed items to the Archived tab
@@ -210,6 +238,24 @@ function getCreateCardAction(idCard) {
   }
   var query = Enumerable.from(actionsCreateCard)
     .where(function(x){if(x.data.card){return x.data.card.id == idCard}})
+    .toArray();
+  return query.length > 0 ? query[0] : false;
+}
+
+function getMoveCardAction(idCard, nameList) {
+  if (!actionsMoveCard){
+    $.ajax({
+      url:'https://trello.com/1/boards/' + idBoard + '/actions?filter=updateCard:idList&limit=1000', 
+      dataType:'json',
+      async: false,
+      success: function(actionsData) {
+        actionsMoveCard = actionsData;
+      }
+    });
+  }
+  var query = Enumerable.from(actionsMoveCard)
+    .where(function(x){if(x.data.card && x.data.listAfter){return x.data.card.id == idCard && x.data.listAfter.name == nameList}})
+    .orderByDescending(function(x){return x.date;})
     .toArray();
   return query.length > 0 ? query[0] : false;
 }
